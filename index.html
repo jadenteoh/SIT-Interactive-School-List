@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Programs → Universities | Interactive Finder</title>
+  <meta name="description" content="Pick a program, instantly see which universities offer it. Data reads directly from Google Sheets (read-only) on the client side.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .fade-in { animation: fadeIn .3s ease both; }
+    @keyframes fadeIn { from { opacity: .0; transform: translateY(2px); } }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <header class="bg-white border-b">
+    <div class="max-w-6xl mx-auto px-4 py-5 flex items-center justify-between">
+      <div>
+        <h1 class="text-xl md:text-2xl font-bold">Programs → Universities</h1>
+        <p class="text-xs md:text-sm text-slate-600">Select a program to see universities that offer it. (No server, data stays in your browser.)</p>
+      </div>
+      <a class="text-sm underline text-slate-600" href="README.html">How it works</a>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+    <!-- Source settings -->
+    <section class="bg-white rounded-2xl shadow p-4 md:p-6 space-y-4">
+      <div class="grid md:grid-cols-4 gap-4 items-end">
+        <div class="md:col-span-2">
+          <label class="text-sm font-semibold">Google Sheet ID</label>
+          <input id="sheetId" class="mt-1 w-full border rounded-xl px-3 py-2 text-sm" value="1ma4hOfTkjOG36cxn-pZnJyL8o5jeIxUn" />
+        </div>
+        <div>
+          <label class="text-sm font-semibold">GID (sheet tab)</label>
+          <input id="gid" class="mt-1 w-full border rounded-xl px-3 py-2 text-sm" value="2062709776" />
+        </div>
+        <div>
+          <button id="loadBtn" class="w-full h-[40px] rounded-xl bg-slate-900 text-white text-sm">Reload</button>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500">Source URL: <code class="bg-slate-100 px-1 rounded">https://docs.google.com/spreadsheets/d/&lt;ID&gt;/gviz/tq?gid=&lt;GID&gt;</code></p>
+    </section>
+
+    <!-- Mapping -->
+    <section id="mappingBox" class="bg-white rounded-2xl shadow p-4 md:p-6 space-y-3 hidden">
+      <h2 class="text-lg font-semibold">Column Mapping</h2>
+      <div class="grid md:grid-cols-3 gap-4 items-end">
+        <div>
+          <label class="text-sm font-medium">University column</label>
+          <select id="colUniversity" class="mt-1 w-full border rounded-xl px-3 py-2 text-sm"></select>
+        </div>
+        <div>
+          <label class="text-sm font-medium">Program column</label>
+          <select id="colProgram" class="mt-1 w-full border rounded-xl px-3 py-2 text-sm"></select>
+        </div>
+        <button id="applyMap" class="h-[42px] px-4 rounded-xl bg-slate-900 text-white text-sm">Apply</button>
+      </div>
+      <p class="text-xs text-slate-500">If auto-detect is off, manually pick which columns represent University and Program.</p>
+    </section>
+
+    <!-- Controls -->
+    <section class="bg-white rounded-2xl shadow p-4 md:p-6 space-y-4">
+      <div class="grid md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <label class="text-sm font-medium">Search program keyword</label>
+          <input id="searchProgram" placeholder="e.g., Computer Science / Business" class="mt-1 w-full border rounded-xl px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">Or choose a program</label>
+          <select id="programSelect" class="mt-1 w-full border rounded-xl px-3 py-2 text-sm"></select>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="clearBtn" class="px-3 py-2 rounded-lg border text-sm">Clear</button>
+        <span id="stats" class="text-sm text-slate-600"></span>
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section class="bg-white rounded-2xl shadow overflow-hidden">
+      <div class="px-4 py-3 border-b flex items-center justify-between">
+        <h3 class="font-semibold">Universities offering the selected program</h3>
+        <button id="exportBtn" class="px-3 py-1.5 rounded-lg border text-sm">Export CSV</button>
+      </div>
+      <div id="results" class="p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+      <div id="empty" class="p-6 text-center text-slate-500 hidden">No program selected yet.</div>
+    </section>
+
+    <section id="tips" class="text-sm text-slate-600"></section>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    async function fetchSheetByGid(id, gid) { // use gid explicitly
+      const url = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?gid=${gid}`;
+      const res = await fetch(url);
+      const text = await res.text();
+      const jsonStr = text.replace(/^.*setResponse\(/, '').replace(/\);?\s*$/, '');
+      return JSON.parse(jsonStr);
+    }
+
+    function tableToObjects(table){
+      const cols = table.cols.map(c => (c.label || c.id || '').trim());
+      const rows = table.rows.map(r => {
+        const obj = {};
+        r.c.forEach((cell, i) => obj[cols[i] || `COL_${i+1}`] = cell ? (cell.f ?? cell.v ?? '') : '');
+        return obj;
+      });
+      return { cols, rows };
+    }
+
+    const UNI_HINTS = ['University','University Name','School','大學','學校','校名'];
+    const PROG_HINTS = ['Program','Department','Major','系所','科系','學系','系名','學程'];
+
+    function guessKey(columns, hints){
+      const low = columns.map(c => c.toLowerCase());
+      for(const h of hints){
+        const i = low.indexOf(h.toLowerCase());
+        if(i !== -1) return columns[i];
+      }
+      for(const c of columns){
+        const lc = c.toLowerCase();
+        if(hints.some(h => lc.includes(h.toLowerCase()))) return c;
+      }
+      return columns[0] || '';
+    }
+
+    let columns = [], allRows = [], uniKey = '', progKey = '', progMap = new Map();
+
+    function fillMappingSelectors(){
+      const uniSel = $('colUniversity'), progSel = $('colProgram');
+      uniSel.innerHTML = columns.map(c=>`<option>${c}</option>`).join('');
+      progSel.innerHTML = columns.map(c=>`<option>${c}</option>`).join('');
+      uniKey = guessKey(columns, UNI_HINTS);
+      progKey = guessKey(columns, PROG_HINTS);
+      uniSel.value = uniKey; progSel.value = progKey;
+      $('mappingBox').classList.remove('hidden');
+    }
+
+    function buildIndex(){
+      const map = new Map(); // program -> Set(universities)
+      for(const r of allRows){
+        const u = String(r[uniKey] ?? '').trim();
+        const p = String(r[progKey] ?? '').trim();
+        if(!u || !p) continue;
+        if(!map.has(p)) map.set(p, new Set());
+        map.get(p).add(u);
+      }
+      return map;
+    }
+
+    function populateProgramSelect(){
+      const sel = $('programSelect');
+      const list = Array.from(progMap.keys()).sort((a,b)=>a.localeCompare(b));
+      sel.innerHTML = '<option value="">— Select a program —</option>' + list.map(p=>`<option>${p}</option>`).join('');
+    }
+
+    function renderResults(unis){
+      const container = $('results');
+      const empty = $('empty');
+      const stats = $('stats');
+      container.innerHTML = '';
+      if(!unis || !unis.size){ empty.classList.remove('hidden'); stats.textContent=''; return; }
+      empty.classList.add('hidden');
+      const arr = Array.from(unis).sort((a,b)=>a.localeCompare(b));
+      stats.textContent = `Found ${arr.length} universities`;
+      for(const u of arr){
+        const card = document.createElement('div');
+        card.className = 'fade-in border rounded-xl p-3 bg-white flex items-center gap-3';
+        const dot = document.createElement('div');
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400';
+        const name = document.createElement('div');
+        name.className = 'font-medium text-sm';
+        name.textContent = u;
+        card.appendChild(dot); card.appendChild(name);
+        container.appendChild(card);
+      }
+    }
+
+    function exportCSV(unis){
+      const lines = ['University'];
+      Array.from(unis || []).forEach(u => lines.push('"' + String(u).replaceAll('"','""') + '"'));
+      const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'universities.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function load(){
+      $('tips').textContent = 'Loading…';
+      $('results').innerHTML=''; $('empty').classList.remove('hidden'); $('stats').textContent='';
+      try{
+        const id = $('sheetId').value.trim();
+        const gid = $('gid').value.trim();
+        const data = await fetchSheetByGid(id, gid);
+        const { cols, rows } = tableToObjects(data.table);
+        columns = cols; allRows = rows;
+        fillMappingSelectors();
+        progMap = buildIndex();
+        populateProgramSelect();
+        $('tips').textContent = 'Loaded. If mapping is wrong, adjust the dropdowns above.';
+      }catch(err){
+        console.error(err);
+        $('tips').innerHTML = 'Failed to read the sheet. Please verify:<ul class="list-disc pl-5 mt-1"><li>The sheet is publicly viewable or published to the web.</li><li>The GID is correct.</li><li>The tab contains University and Program columns.</li></ul>';
+      }
+    }
+
+    $('applyMap').addEventListener('click', () => { uniKey = $('colUniversity').value; progKey = $('colProgram').value; progMap = buildIndex(); populateProgramSelect(); $('results').innerHTML=''; $('empty').classList.remove('hidden'); $('stats').textContent=''; });
+    $('loadBtn').addEventListener('click', load);
+    $('programSelect').addEventListener('change', () => { const p = $('programSelect').value; if(!p){ $('results').innerHTML=''; $('empty').classList.remove('hidden'); $('stats').textContent=''; return; } renderResults(progMap.get(p)); });
+    $('searchProgram').addEventListener('input', () => { const q = $('searchProgram').value.trim().toLowerCase(); if(!q){ $('results').innerHTML=''; $('empty').classList.remove('hidden'); $('stats').textContent=''; return; } const hit = Array.from(progMap.keys()).find(p => p.toLowerCase().includes(q)); if(hit){ $('programSelect').value = hit; renderResults(progMap.get(hit)); } else { $('results').innerHTML=''; $('empty').classList.remove('hidden'); $('stats').textContent='No matches'; } });
+    $('clearBtn').addEventListener('click', () => { $('searchProgram').value=''; $('programSelect').value=''; $('results').innerHTML=''; $('empty').classList.remove('hidden'); $('stats').textContent=''; });
+    $('exportBtn').addEventListener('click', () => { const p = $('programSelect').value; if(p) exportCSV(progMap.get(p)); });
+
+    load();
+  </script>
+</body>
+</html>

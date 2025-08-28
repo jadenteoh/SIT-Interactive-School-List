@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>README | Programs → Universities</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <main class="max-w-3xl mx-auto p-6 space-y-6">
+    <h1 class="text-2xl font-bold">How to deploy</h1>
+    <p class="text-sm text-slate-600">This site reads your Google Sheet directly in the browser (no server). It’s prefilled with your Sheet ID (<code>1ma4hOfTkjOG36cxn-pZnJyL8o5jeIxUn</code>) and GID (<code>2062709776</code>). You can change them from the top bar on the page.</p>
+
+    <section class="bg-white rounded-2xl shadow p-5 space-y-3">
+      <h2 class="text-lg font-semibold">1) Prepare the Google Sheet</h2>
+      <ol class="list-decimal pl-5 space-y-2 text-sm">
+        <li>Make the sheet tab (gid 2062709776) publicly viewable: Share → Anyone with the link (Viewer) or File → Publish to the web.</li>
+        <li>Ensure columns for <strong>University</strong> and <strong>Program</strong> exist (names can vary; you can map columns on the page).</li>
+      </ol>
+    </section>
+
+    <section class="bg-white rounded-2xl shadow p-5 space-y-3">
+      <h2 class="text-lg font-semibold">2) Deploy to GitHub Pages</h2>
+      <ol class="list-decimal pl-5 space-y-2 text-sm">
+        <li>Create a public repo on GitHub.</li>
+        <li>Upload <code>index.html</code> and <code>README.html</code>.</li>
+        <li>Settings → Pages → Source: Deploy from a branch → Branch: main → Folder: / (root).</li>
+        <li>Wait ~1 minute. Your site appears at <code>https://&lt;username&gt;.github.io/&lt;repo&gt;</code>.</li>
+      </ol>
+    </section>
+
+    <section class="bg-white rounded-2xl shadow p-5 space-y-3">
+      <h2 class="text-lg font-semibold">3) Or deploy to Netlify</h2>
+      <ol class="list-decimal pl-5 space-y-2 text-sm">
+        <li>Sign in at <a class="underline" href="https://www.netlify.com/">netlify.com</a>.</li>
+        <li>Drag & drop the folder to create a new site (or link your GitHub repo).</li>
+        <li>Netlify gives you a URL like <code>https://xxxxx.netlify.app</code>.</li>
+      </ol>
+    </section>
+
+    <section class="bg-white rounded-2xl shadow p-5 space-y-3">
+      <h2 class="text-lg font-semibold">4) Using the page</h2>
+      <ul class="list-disc pl-5 space-y-2 text-sm">
+        <li>Pick a program from the dropdown or search by keyword.</li>
+        <li>Matching universities will appear instantly; click Export CSV to download the list.</li>
+        <li>If auto-detection of columns is off, use the “Column Mapping” box to set University / Program fields.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
